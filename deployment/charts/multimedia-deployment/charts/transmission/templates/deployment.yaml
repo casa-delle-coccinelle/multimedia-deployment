@@ -1,0 +1,133 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "transmission.fullname" . }}
+  labels:
+    {{- include "transmission.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "transmission.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        rollme: {{ randAlphaNum 5 | quote }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "transmission.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "transmission.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: PUID
+              value: "1000"
+            - name: PGID
+              value: "1000"
+            - name: TZ
+              value: "Etc/UTC"
+            {{- if .Values.rpcWhitelist }}
+            - name: WHITELIST
+              value: {{ .Values.rpcWhitelist | quote }}
+            {{- end }}
+            {{- if .Values.rpcHostWhitelist }}
+            - name: HOST_WHITELIST
+              value: {{ .Values.rpcHostWhitelist | quote }}
+            {{- end }}
+            {{- if .Values.username }}
+            - name: USER
+              value: {{ .Values.username | quote }}
+            {{- end }}
+            {{- if .Values.password }}
+            - name: PASS
+              value: {{ .Values.password | quote }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+            - name: nat-port-udp
+              containerPort: {{ .Values.natPort }}
+              protocol: UDP
+            - name: nat-port
+              containerPort: {{ .Values.natPort }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - mountPath: /downloads
+              name: data
+            - mountPath: /watch
+              name: watch
+            {{- if .Values.settingsJSON }}
+            - mountPath: /config/settings.json
+              name: config
+              subPath: settings.json
+            {{- end }}
+        - name: {{ .Chart.Name }}-exporter
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.exporterRepository }}:{{ .Values.image.exporterTag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: TRANSMISSION_ADDR
+              value: "http://localhost:9091"
+            - name: WEB_PATH
+              value: "/metrics"
+            - name: WEB_ADDR
+              value: ":9190"
+            {{- if .Values.username }}
+            - name: TRANSMISSION_USERNAME
+              value: {{ .Values.username | quote }}
+            {{- end }}
+            {{- if .Values.password }}
+            - name: TRANSMISSION_PASSWORD
+              value: {{ .Values.password | quote }}
+            {{- end }}
+          ports:
+            - name: metrics
+              containerPort: 9190
+              protocol: TCP
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: data
+          {{ toYaml .Values.storage.data | nindent 10 }}
+        {{- if .Values.settingsJSON }}
+        - name: config
+          secret:
+            secretName: {{ .Values.settingsJSON | quote }}
+        {{- end }}
+        - name: watch
+          {{ toYaml .Values.storage.watch | nindent 10 }}
