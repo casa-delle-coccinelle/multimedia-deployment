@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "jellyfin.fullname" . }}
+  labels:
+    {{- include "jellyfin.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: 1900
+      targetPort: dlna
+      protocol: UDP
+      name: dlna
+    - port: 7359
+      targetPort: cdiscovery
+      protocol: UDP
+      name: cdiscovery
+  selector:
+    {{- include "jellyfin.selectorLabels" . | nindent 4 }}

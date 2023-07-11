@@ -1,0 +1,112 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "jellyfin.fullname" . }}
+  labels:
+    {{- include "jellyfin.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "jellyfin.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "jellyfin.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "jellyfin.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        - name: config
+          image: alpine
+          command:
+            - /bin/sh
+            - -c
+            - "cp /config-predefined/system.xml /config"
+          volumeMounts:
+            - name: data
+              mountPath: "/data"
+            - name: cache
+              mountPath: "/cache"
+            - name: config
+              mountPath: "/config"
+            - name: config-predefined
+              mountPath: "/config-predefined"
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: JELLYFIN_DATA_DIR
+              value: /data
+            - name: JELLYFIN_CONFIG_DIR
+              value: /config
+            {{- if and .Values.ingress .Values.ingress.hosts }}
+            {{- with (first .Values.ingress.hosts) }}
+            - name: JELLYFIN_PublishedServerURL
+              value: {{ .host }}
+            {{- end }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+            - name: dlna
+              containerPort: 1900
+              protocol: UDP
+            - name: cdiscovery
+              containerPort: 7359
+              protocol: UDP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: "/data"
+            - name: cache
+              mountPath: "/cache"
+            - name: config
+              mountPath: "/config"
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: data
+          {{ toYaml .Values.storage.data | nindent 10 }}
+        - name: cache
+          {{ toYaml .Values.storage.cache | nindent 10 }}
+        - name: config
+          emptyDir:
+            sizeLimit: "100Mi"
+        - name: config-predefined
+          configMap:
+            name: {{ include "jellyfin.fullname" . }}-system
