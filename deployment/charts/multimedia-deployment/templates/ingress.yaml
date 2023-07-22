@@ -1,5 +1,5 @@
 {{- if .Values.ingress.enabled -}}
-{{- $fullName := include "jellyfin.fullname" . -}}
+{{- $fullName := include "multimedia-deployment.fullname" . -}}
 {{- $svcPort := .Values.service.port -}}
 {{- if and .Values.ingress.className (not (semverCompare ">=1.18-0" .Capabilities.KubeVersion.GitVersion)) }}
   {{- if not (hasKey .Values.ingress.annotations "kubernetes.io/ingress.class") }}
@@ -17,7 +17,7 @@ kind: Ingress
 metadata:
   name: {{ $fullName }}
   labels:
-    {{- include "jellyfin.labels" . | nindent 4 }}
+    {{- include "multimedia-deployment.labels" . | nindent 4 }}
   {{- with .Values.ingress.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -41,20 +41,6 @@ spec:
     - host: {{ .host | quote }}
       http:
         paths:
-          - path: /health
-            pathType: Prefix
-            backend:
-              service:
-                name: no-such-service
-                port:
-                  number: 123
-          - path: /metrics
-            pathType: Prefix
-            backend:
-              service:
-                name: no-such-service
-                port:
-                  number: 123
           {{- range .paths }}
           - path: {{ .path }}
             {{- if and .pathType (semverCompare ">=1.18-0" $.Capabilities.KubeVersion.GitVersion) }}
